@@ -1,5 +1,8 @@
 #include "SoapyPlutoSDR.hpp"
 #include <SoapySDR/Registry.hpp>
+#ifdef HAS_LIBUSB1
+#include <libusb.h>
+#endif
 
 static std::vector<SoapySDR::Kwargs> results;
 static std::vector<SoapySDR::Kwargs> find_PlutoSDR(const SoapySDR::Kwargs &args) {
@@ -16,6 +19,28 @@ static std::vector<SoapySDR::Kwargs> find_PlutoSDR(const SoapySDR::Kwargs &args)
 	// Backends can error, scan each one individually
 	std::vector<std::string> backends = {"local", "usb", "ip"};
 	for (std::vector<std::string>::iterator it = backends.begin(); it != backends.end(); it++) {
+
+		if (*it == "usb") {
+#ifdef HAS_LIBUSB1
+			// Abort early if no known ADALM-Pluto USB VID:PID (0456:b673) is found
+			libusb_context *usb_ctx = nullptr;
+			int r = libusb_init(&usb_ctx);
+			if (r < 0) {
+				SoapySDR_logf(SOAPY_SDR_WARNING, "libusb init error (%d)\n", r);
+			}
+			else {
+				libusb_device_handle *usb_dev = libusb_open_device_with_vid_pid(usb_ctx, 0x0456, 0xb673);
+				if (usb_dev) {
+					SoapySDR_logf(SOAPY_SDR_DEBUG, "ADALM-Pluto VID:PID found\n");
+					libusb_close(usb_dev);
+				}
+				else {
+					SoapySDR_logf(SOAPY_SDR_DEBUG, "No ADALM-Pluto VID:PID found\n");
+					continue;
+				}
+			}
+#endif
+		}
 
 		scan_ctx = iio_create_scan_context(it->c_str(), 0);
 		if (scan_ctx == nullptr) {
